@@ -7,8 +7,6 @@ import multer from 'multer';
 import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new Database('booking.db');
-db.pragma('journal_mode = WAL'); // Enable Write-Ahead Logging for better concurrency
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -27,6 +25,9 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage });
+
+const db = new Database('booking.db');
+db.pragma('journal_mode = WAL');
 
 // Initialize Database
 db.exec(`
@@ -78,8 +79,8 @@ db.exec(`
 `);
 
 // Seed settings if empty
-const runningText = db.prepare("SELECT value FROM settings WHERE key = 'running_text'").get() as { value: string };
-if (!runningText) {
+const runningTextRow = db.prepare("SELECT value FROM settings WHERE key = 'running_text'").get() as { value: string };
+if (!runningTextRow) {
   db.prepare("INSERT INTO settings (key, value) VALUES ('running_text', 'Selamat Datang di RoomBook - Sistem Manajemen Ruang Meeting Modern')").run();
 }
 
@@ -132,14 +133,13 @@ if (adCount.count === 0) {
   insertAd.run('image', 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&q=80&w=1000', 10);
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const PORT = 3000;
 
-  app.use(express.json());
-  app.use('/uploads', express.static('uploads'));
+app.use(express.json());
+app.use('/uploads', express.static('uploads'));
 
-  // API Routes
+// API Routes
   
   // File Upload
   app.post('/api/upload', upload.single('file'), (req, res) => {
@@ -383,7 +383,6 @@ async function startServer() {
     
     res.json(stats);
   });
-
   // Users
   app.get('/api/users', (req, res) => {
     const users = db.prepare('SELECT id, username, role FROM users').all();
@@ -418,20 +417,24 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  // Vite middleware
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static('dist'));
-  }
+// Vite middleware
+if (process.env.NODE_ENV !== 'production') {
+  const { createServer: createViteServer } = await import('vite');
+  const vite = await createViteServer({
+    server: { middlewareMode: true },
+    appType: 'spa',
+  });
+  app.use(vite.middlewares);
+} else {
+  app.use(express.static('dist'));
+}
 
+// Export app for Vercel
+export default app;
+
+// Only listen if running directly
+if (process.env.NODE_ENV !== 'production' && import.meta.url === `file://${process.argv[1]}`) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
-
-startServer();
