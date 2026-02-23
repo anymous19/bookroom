@@ -1,0 +1,5 @@
+{
+  "name": "Room Booking System",
+  "description": "A room booking application where users can request rooms and admins can verify requests.",
+  "requestFramePermissions": []
+}
